@@ -1,46 +1,46 @@
-# This is a basic workflow to help you get started with Actions
+name: Boomi CLI Smoke (envId)
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      env_id:
+        description: "Boomi Environment ID"
+        required: true
+        default: "dd7fcb9f-7c12-4f69-a320-5706f6d3d196"
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  boomi-report:
+  smoke:
     runs-on: ubuntu-latest
+
     env:
       accountId: ${{ secrets.BOOMI_ACCOUNT_ID }}
       authToken: ${{ secrets.BOOMI_AUTH_TOKEN }}
-      baseURL: ${{ secrets.BOOMI_BASE_URL }}/${{ secrets.BOOMI_ACCOUNT_ID }}
-      gitComponentRepoURL: ${{ secrets.GIT_COMPONENT_REPO_URL }}
-      gitComponentUserName: ${{ secrets.GIT_COMPONENT_USER_NAME }}
-      gitComponentUserEmail: ${{ secrets.GIT_COMPONENT_USER_EMAIL }}
       h1: "Content-Type: application/json"
       h2: "Accept: application/json"
-      WORKSPACE: ${{ github.workspace }}
+      baseURL: "https://api.boomi.com/api/rest/v1/${{ secrets.BOOMI_ACCOUNT_ID }}"
+      WORKSPACE: ${{ github.workspace }}/out
+      VERBOSE: "false"
+      SLEEP_TIMER: "0.2"
+
     steps:
-      - uses: actions/checkout@v3
-        with:
-          repository: jayeshpatel-23/lime-boomi-cicd
-          path: cli
+      - uses: actions/checkout@v4
+
       - name: Install tools
-        run: sudo apt-get update && sudo apt-get install -y jq libxml2-utils
-      - name: Generate Deployment Report
         run: |
-          cd cli/bin
-          ./getAllEnvironments.sh
-          ./publishDeployedPackage.sh env=DEV > $WORKSPACE/deployment-report.html
-      - name: Push Report to Artifacts Repo
+          sudo apt-get update
+          sudo apt-get install -y jq curl libxml2-utils
+          mkdir -p "$WORKSPACE"
+          chmod +x bin/*.sh || true
+
+      - name: Query Deployed Packages for EnvId
         run: |
-          git config --global user.email "${gitComponentUserEmail}"
-          git config --global user.name "${gitComponentUserName}"
-          git clone "${gitComponentRepoURL}" artifacts
-          cp $WORKSPACE/deployment-report.html artifacts/
-          cd artifacts
-          git add .
-          git commit -m "Add latest deployment report"
-          git push
+          ENV_ID="${{ github.event.inputs.env_id }}"
+          echo "Using envId=$ENV_ID"
+          # Example: check a package, or just pull all with publishDeployedPackage
+          ./bin/publishDeployedPackage.sh env=$ENV_ID > "$WORKSPACE/deployed-packages-${ENV_ID}.html"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-packages-${{ github.event.inputs.env_id }}
+          path: out/
